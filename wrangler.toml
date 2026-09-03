@@ -1,0 +1,16 @@
+name = "aliveweek"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# 5분마다 캘린더 폴링 (P0 심장박동)
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "aliveweek"
+database_id = "REPLACE_AFTER_D1_CREATE"   # `npx wrangler d1 create aliveweek` 후 교체
+
+# Secrets (wrangler secret put <이름> 으로 등록, 코드에 절대 안 씀):
+#   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN  ← 한양 계정으로 발급
+#   NOTION_TOKEN                                                     ← 노션 내부 통합 토큰
