@@ -49,7 +49,7 @@ export async function listEventsInRange(env: Env, calId: string, timeMinISO: str
   const tok = await accessToken(env);
   const q = new URLSearchParams({
     maxResults: "250", singleEvents: "true", showDeleted: "false",
-    orderBy: "startTime", timeMin: timeMinISO, timeMax: timeMaxISO,
+    orderBy: "startTime", timeMin: timeMinISO, timeMax: timeMaxISO, timeZone: "Asia/Seoul",
   });
   const r = await fetch(`${BASE}/calendars/${encodeURIComponent(calId)}/events?${q}`, {
     headers: { Authorization: `Bearer ${tok}` },

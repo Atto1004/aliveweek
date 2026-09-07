@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#3f51b5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>AliVEWEEK</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif; background:#f4f5f7; color:#1c1e21; }
+  @media (prefers-color-scheme: dark) { body { background:#15171a; color:#e7e9ea; } }
+  header.top { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; padding:14px 18px; background:#fff; border-bottom:1px solid #e2e4e8; position:sticky; top:0; z-index:2; }
+  @media (prefers-color-scheme: dark) { header.top { background:#1d1f23; border-color:#2b2e33; } }
+  header.top h1 { font-size:15px; margin:0; font-weight:600; }
+  .nav a, .btn { text-decoration:none; color:inherit; padding:6px 10px; border:1px solid #d7d9dd; border-radius:6px; margin-left:6px; font-size:13px; background:transparent; cursor:pointer; font-family:inherit; }
+  @media (prefers-color-scheme: dark) { .nav a, .btn { border-color:#3a3d43; } }
+  .btn.primary { background:#3f51b5; color:#fff; border-color:#3f51b5; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px; padding:8px 18px; font-size:11px; }
+  .chip { padding:2px 8px; border-radius:10px; background:var(--c); color:#fff; opacity:.85; }
+  .week { display:grid; grid-template-columns: repeat(7, minmax(150px,1fr)); gap:10px; padding:12px; overflow-x:auto; }
+  .day { background:#fff; border-radius:10px; padding:8px; min-height:120px; }
+  @media (prefers-color-scheme: dark) { .day { background:#1d1f23; } }
+  .day.today { outline:2px solid #3f51b5; outline-offset:-2px; }
+  .day header { font-weight:600; font-size:13px; margin-bottom:6px; display:flex; justify-content:space-between; }
+  .day header .dow { color:#8a8f98; font-weight:400; }
+  .cards { display:flex; flex-direction:column; gap:6px; }
+  .card { border-left:4px solid var(--c); background:color-mix(in srgb, var(--c) 14%, transparent); border-radius:4px; padding:5px 7px; font-size:12px; }
+  .card .time { font-weight:600; font-variant-numeric: tabular-nums; display:flex; justify-content:space-between; gap:6px; }
+  .card .calTag { font-weight:400; color:#8a8f98; font-size:10px; white-space:nowrap; }
+  .card .title { margin-top:2px; }
+  .card .loc { color:#8a8f98; font-size:11px; margin-top:1px; }
+  .empty { color:#b0b4ba; font-size:12px; }
+  .panel { max-width:520px; margin:40px auto; padding:20px; background:#fff; border-radius:12px; font-size:14px; line-height:1.6; }
+  @media (prefers-color-scheme: dark) { .panel { background:#1d1f23; } }
+  .panel input { width:100%; padding:8px; font-size:13px; border:1px solid #d7d9dd; border-radius:6px; font-family:inherit; margin:6px 0 10px; }
+  .panel code { font-size:12px; background:rgba(127,127,127,.15); padding:1px 5px; border-radius:4px; }
+  .msg { padding:10px 18px; font-size:13px; color:#8a8f98; }
+  .err { color:#d50000; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1 id="title">AliVEWEEK</h1>
+  <div class="nav" id="nav"></div>
+</header>
+<div class="legend" id="legend"></div>
+<div id="main"></div>
+
+<script src="https://accounts.google.com/gsi/client" async defer onload="onGisReady()"></script>
+<script>
+/* AliVEWEEK 주차별 일정표 — 정적(GitHub Pages)판.
+   서버 없이 브라우저에서 구글에 직접 로그인해 읽기 전용으로 조회한다.
+   비밀값 없음: OAuth 클라이언트 ID는 공개값이라 이 페이지에 저장해도 된다(localStorage). */
+const CAL = { attoyd: "attoyd1004@gmail.com", hanyang: "rladkxh1004@hanyang.ac.kr" };
+const CAL_LABEL = { [CAL.attoyd]: "attoyd", [CAL.hanyang]: "한양" };
+const COLOR_META = {
+  "1": { name: "이동", hex: "#7986cb" }, "2": { name: "약속·모임", hex: "#33b679" },
+  "3": { name: "창업·대외", hex: "#8e24aa" }, "4": { name: "운선", hex: "#e67c73" },
+  "5": { name: "미분류", hex: "#f6bf26" }, "6": { name: "노동·근무", hex: "#f4511e" },
+  "7": { name: "공부", hex: "#039be5" }, "8": { name: "돈", hex: "#616161" },
+  "9": { name: "수업·학사", hex: "#3f51b5" }, "10": { name: "건강·몸", hex: "#0b8043" },
+  "11": { name: "시험·마감", hex: "#d50000" },
+};
+const WEEK1_START = "2026-08-30"; // 1주차 시작(일) — 학사 캘린더 "N주차" 마커와 동일
+const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+const SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+
+const toDateStr = (d) => d.toISOString().slice(0, 10);
+const kstToday = () => toDateStr(new Date(Date.now() + 9 * 3600e3));
+const addDays = (s, n) => { const d = new Date(s + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return toDateStr(d); };
+const sundayOf = (s) => { const d = new Date(s + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return toDateStr(d); };
+const weekNo = (sun) => Math.round((new Date(sun + "T00:00:00Z") - new Date(WEEK1_START + "T00:00:00Z")) / 864e5 / 7) + 1;
+const mmdd = (s) => s.slice(5).replace("-", "/");
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const $ = (id) => document.getElementById(id);
+
+let clientId = null;
+try { clientId = new URLSearchParams(location.search).get("client_id") || localStorage.getItem("aw.clientId"); } catch {}
+if (clientId) { try { localStorage.setItem("aw.clientId", clientId); } catch {} }
+
+const params = new URLSearchParams(location.search);
+const sunday = sundayOf(/^\d{4}-\d{2}-\d{2}$/.test(params.get("start") || "") ? params.get("start") : kstToday());
+
+function renderHeader() {
+  $("title").textContent = `AliVEWEEK · ${weekNo(sunday)}주차 (${mmdd(sunday)}–${mmdd(addDays(sunday, 6))})`;
+  $("nav").innerHTML = `<a href="?start=${addDays(sunday, -7)}">← 이전</a><a href="?">이번주</a><a href="?start=${addDays(sunday, 7)}">다음 →</a>`;
+  $("legend").innerHTML = Object.values(COLOR_META).map((m) => `<span class="chip" style="--c:${m.hex}">${esc(m.name)}</span>`).join("");
+}
+
+function setupPanel(msg) {
+  $("main").innerHTML = `<div class="panel">
+    ${msg ? `<p class="err">${esc(msg)}</p>` : ""}
+    <p><b>처음 1회 설정</b> — 구글 OAuth 클라이언트 ID를 넣어줘. (공개값이라 여기 저장해도 안전)</p>
+    <p style="font-size:12px;color:#8a8f98">console.cloud.google.com → API 및 서비스 → 사용자 인증 정보 → OAuth 클라이언트 ID → <b>웹 애플리케이션</b> → 승인된 자바스크립트 원본에 <code>${esc(location.origin)}</code> 추가</p>
+    <input id="cid" placeholder="xxxx.apps.googleusercontent.com" value="${esc(clientId || "")}">
+    <button class="btn primary" onclick="saveClientId()">저장하고 로그인</button>
+  </div>`;
+}
+function saveClientId() {
+  const v = $("cid").value.trim();
+  if (!v) return;
+  clientId = v;
+  try { localStorage.setItem("aw.clientId", v); } catch {}
+  login(true);
+}
+
+function savedToken() {
+  try { const t = JSON.parse(sessionStorage.getItem("aw.tok") || "null"); if (t && Date.now() < t.exp - 60e3) return t.token; } catch {}
+  return null;
+}
+function loginPanel() {
+  $("main").innerHTML = `<div class="panel">
+    <p>구글 로그인이 필요해 — <b>한양 계정(rladkxh1004@hanyang.ac.kr)</b>으로. attoyd 캘린더도 그 계정 권한으로 같이 읽어.</p>
+    <button class="btn primary" onclick="login(true)">구글로 로그인</button>
+    <button class="btn" onclick="setupPanel()">클라이언트 ID 바꾸기</button>
+  </div>`;
+}
+function login(interactive) {
+  if (!window.google || !google.accounts) { setTimeout(() => login(interactive), 300); return; }
+  const tc = google.accounts.oauth2.initTokenClient({
+    client_id: clientId, scope: SCOPE,
+    callback: (r) => {
+      if (r.error) { loginPanel(); return; }
+      try { sessionStorage.setItem("aw.tok", JSON.stringify({ token: r.access_token, exp: Date.now() + r.expires_in * 1000 })); } catch {}
+      loadWeek(r.access_token);
+    },
+    error_callback: () => loginPanel(),
+  });
+  tc.requestAccessToken({ prompt: interactive ? "" : "none" });
+}
+
+async function fetchEvents(token, calId, timeMin, timeMax) {
+  const q = new URLSearchParams({ maxResults: "250", singleEvents: "true", showDeleted: "false", orderBy: "startTime", timeMin, timeMax, timeZone: "Asia/Seoul" });
+  const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${q}`, { headers: { Authorization: "Bearer " + token } });
+  if (r.status === 401 || r.status === 403) { try { sessionStorage.removeItem("aw.tok"); } catch {} throw new Error("auth"); }
+  if (!r.ok) throw new Error(await r.text());
+  return (await r.json()).items || [];
+}
+
+function cardHtml(c) {
+  const hex = (COLOR_META[c.color] || {}).hex || "#9aa0a6";
+  const time = c.allDay ? "종일" : `${c.start}${c.end ? "–" + c.end : ""}`;
+  return `<div class="card" style="--c:${hex}"><div class="time">${esc(time)}<span class="calTag">${esc(c.cal)}</span></div><div class="title">${esc(c.title)}</div>${c.loc ? `<div class="loc">${esc(c.loc)}</div>` : ""}</div>`;
+}
+
+async function loadWeek(token) {
+  $("main").innerHTML = `<p class="msg">불러오는 중…</p>`;
+  const days = Array.from({ length: 7 }, (_, i) => addDays(sunday, i));
+  const buckets = Object.fromEntries(days.map((d) => [d, []]));
+  const timeMin = `${sunday}T00:00:00+09:00`, timeMax = `${addDays(sunday, 7)}T00:00:00+09:00`;
+  try {
+    for (const calId of [CAL.attoyd, CAL.hanyang]) {
+      const evs = await fetchEvents(token, calId, timeMin, timeMax);
+      for (const ev of evs) {
+        if (ev.status === "cancelled") continue;
+        const base = { title: ev.summary || "(제목 없음)", loc: ev.location, color: ev.colorId || "0", cal: CAL_LABEL[calId] || calId };
+        if (ev.start && ev.start.dateTime) {
+          const k = ev.start.dateTime.slice(0, 10);
+          if (buckets[k]) buckets[k].push({ ...base, allDay: false, start: ev.start.dateTime.slice(11, 16), end: ev.end && ev.end.dateTime ? ev.end.dateTime.slice(11, 16) : "" });
+        } else if (ev.start && ev.start.date) {
+          let d = ev.start.date; const end = (ev.end && ev.end.date) || addDays(d, 1);
+          while (d < end) { if (buckets[d]) buckets[d].push({ ...base, allDay: true, start: "", end: "" }); d = addDays(d, 1); }
+        }
+      }
+    }
+  } catch (e) {
+    if (String(e.message) === "auth") { loginPanel(); return; }
+    $("main").innerHTML = `<p class="msg err">불러오기 실패: ${esc(e.message)}</p>`; return;
+  }
+  const today = kstToday();
+  for (const d of days) buckets[d].sort((a, b) => (a.allDay === b.allDay ? a.start.localeCompare(b.start) : a.allDay ? -1 : 1));
+  $("main").innerHTML = `<div class="week">${days.map((d) => {
+    const dt = new Date(d + "T00:00:00Z");
+    return `<section class="day${d === today ? " today" : ""}"><header><span>${dt.getUTCMonth() + 1}/${dt.getUTCDate()}</span><span class="dow">${DOW[dt.getUTCDay()]}</span></header><div class="cards">${buckets[d].map(cardHtml).join("") || '<p class="empty">일정 없음</p>'}</div></section>`;
+  }).join("")}</div>`;
+}
+
+function onGisReady() {
+  if (!clientId) return;
+  if (!savedToken()) login(false); // 조용히 시도 → 실패하면 로그인 버튼
+}
+renderHeader();
+if (!clientId) setupPanel();
+else { const t = savedToken(); if (t) loadWeek(t); else loginPanel(); }
+</script>
+</body>
+</html>
