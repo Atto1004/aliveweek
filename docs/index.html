@@ -55,13 +55,14 @@
     background:color-mix(in srgb, var(--c) 18%, var(--panel)); border-left:3px solid var(--c); color:var(--fg); }
   .ev .t { font-weight:600; font-variant-numeric:tabular-nums; font-size:10px; color:var(--c); filter:brightness(.85); }
   @media (prefers-color-scheme: dark) { .ev .t { filter:brightness(1.3); } }
-  .ev .n { font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .ev .l { color:var(--mute); font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ev .n { font-weight:500; white-space:normal; overflow-wrap:anywhere; word-break:keep-all; line-height:1.2; }
+  .ev .l { color:var(--mute); font-size:10px; white-space:normal; overflow-wrap:anywhere; line-height:1.2; }
   .ev.past { opacity:.45; }
   .ev.live { box-shadow:0 0 0 2px var(--c); background:color-mix(in srgb, var(--c) 30%, var(--panel)); }
-  .ev.short { padding:1px 5px; }
-  .ev.short .n { display:inline; }
-  .ev.short .t { display:inline; margin-right:4px; }
+  /* 짧은 일정(이동 등): 시각 줄 생략, 제목만 2줄까지 — 최소 높이는 30분 자리로 보장(layout에서 겹침 회피) */
+  .ev.short { padding:0 4px; display:flex; align-items:center; background:color-mix(in srgb, var(--c) 22%, var(--panel)); box-shadow:0 1px 3px rgba(0,0,0,.18); }
+  .ev.short .t { display:none; }
+  .ev.short .n { font-size:10px; line-height:1.15; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 
   .nowline { position:absolute; left:0; right:0; height:2px; background:var(--now); z-index:2; pointer-events:none; }
   .nowline::before { content:""; position:absolute; left:-5px; top:-4px; width:10px; height:10px; border-radius:50%; background:var(--now); }
@@ -92,7 +93,7 @@
   .panel code { font-size:12px; background:rgba(127,127,127,.15); padding:1px 5px; border-radius:4px; }
   .msg { padding:10px 14px; font-size:13px; color:var(--mute); }
   .err { color:#d50000; }
-  @media (max-width:600px) { :root { --hour:48px; --col:104px; --gutter:38px; } .dayhead b { font-size:15px; } header.top h1 { font-size:13px; } }
+  @media (max-width:600px) { :root { --hour:52px; --col:120px; --gutter:38px; } .dayhead b { font-size:15px; } header.top h1 { font-size:13px; } }
 </style>
 </head>
 <body>
@@ -124,6 +125,7 @@ const WEEK1_START = "2026-08-30"; // 1주차 시작(일) — 학사 캘린더 "N
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 const REFRESH_MS = 5 * 60e3;
+const MIN_VIS = 30; // 블록 최소 높이(분) — 10분 이동도 제목이 보이게
 
 const toDateStr = (d) => d.toISOString().slice(0, 10);
 const kstNow = () => new Date(Date.now() + 9 * 3600e3);          // UTC getter로 읽으면 KST
@@ -223,6 +225,11 @@ function layout(items) {
     cluster.push(it); clusterEnd = Math.max(clusterEnd, it.e);
   }
   if (cluster.length) flush();
+  // 최소 높이(ve)가 다음 블록 머리를 덮으면 그만큼 다음 블록 내용을 아래로
+  for (const it of items) {
+    it.padTop = 0;
+    for (const p of items) if (p !== it && p.col === it.col && p.e <= it.s && p.ve > it.s) it.padTop = Math.max(it.padTop, p.ve - it.s);
+  }
 }
 
 let hasGrid = false, timed = {}, allday = {};
@@ -232,9 +239,9 @@ function evHtml(it, d, today, nowMin) {
   const dur = it.e - it.s;
   const state = d < today || (d === today && it.e <= nowMin) ? " past" : d === today && it.s <= nowMin && nowMin < it.e ? " live" : "";
   const w = 100 / it.cols, left = it.col * w;
-  const shortCls = dur < 40 ? " short" : "";
+  const shortCls = dur < 45 ? " short" : "";
   const k = reg(it);
-  return `<div class="ev${state}${shortCls}" data-k="${k}" style="--c:${hex};top:${(it.s / 1440) * 100}%;height:${Math.max(dur, 18) / 1440 * 100}%;left:${left}%;width:calc(${w}% - 2px)" title="${esc(it.title)} ${hm(it.s)}–${hm(it.e)}${it.loc ? " · " + esc(it.loc) : ""}">
+  return `<div class="ev${state}${shortCls}" data-k="${k}" style="--c:${hex};top:${(it.s / 1440) * 100}%;height:calc(${(it.ve - it.s) / 1440 * 100}% - 1px);${it.padTop ? `padding-top:calc(${it.padTop / 60} * var(--hour) + 2px);` : ""}${dur < MIN_VIS ? "z-index:1;" : ""}left:${left}%;width:calc(${w}% - 2px)" title="${esc(it.title)} ${hm(it.s)}–${hm(it.e)}${it.loc ? " · " + esc(it.loc) : ""}">
     <div class="t">${hm(it.s)}–${hm(it.e)}</div><div class="n">${esc(it.title)}</div>${it.loc && dur >= 60 ? `<div class="l">${esc(it.loc)}</div>` : ""}</div>`;
 }
 
@@ -352,7 +359,7 @@ async function loadWeek(token, quiet) {
           for (let d = sd; d <= ed; d = addDays(d, 1)) {
             const s = d === sd ? sm : 0, e = d === ed ? em : 1440;
             if (e <= s) continue;
-            if (t[d]) t[d].push({ ...base, s, e });
+            if (t[d]) t[d].push({ ...base, s, e, ve: Math.min(1440, Math.max(e, s + MIN_VIS)) });
           }
         } else if (ev.start && ev.start.date) {
           let d = ev.start.date; const end = (ev.end && ev.end.date) || addDays(d, 1);
