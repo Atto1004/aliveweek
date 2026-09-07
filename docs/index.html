@@ -2,42 +2,77 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#3f51b5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>AliVEWEEK</title>
 <style>
-  :root { color-scheme: light dark; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif; background:#f4f5f7; color:#1c1e21; }
-  @media (prefers-color-scheme: dark) { body { background:#15171a; color:#e7e9ea; } }
-  header.top { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; padding:14px 18px; background:#fff; border-bottom:1px solid #e2e4e8; position:sticky; top:0; z-index:2; }
-  @media (prefers-color-scheme: dark) { header.top { background:#1d1f23; border-color:#2b2e33; } }
+  :root {
+    color-scheme: light dark;
+    --bg:#f4f5f7; --panel:#fff; --line:#e3e5e9; --line2:#eef0f3; --fg:#1c1e21; --mute:#8a8f98; --accent:#3f51b5; --now:#e53935;
+    --hour:52px; --gutter:46px; --col:124px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#15171a; --panel:#1d1f23; --line:#2b2e33; --line2:#24272c; --fg:#e7e9ea; --mute:#8a8f98; --now:#ff5252; }
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif; background:var(--bg); color:var(--fg); display:flex; flex-direction:column; overflow:hidden; }
+
+  header.top { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex:none; }
   header.top h1 { font-size:15px; margin:0; font-weight:600; }
-  .nav a, .btn { text-decoration:none; color:inherit; padding:6px 10px; border:1px solid #d7d9dd; border-radius:6px; margin-left:6px; font-size:13px; background:transparent; cursor:pointer; font-family:inherit; }
-  @media (prefers-color-scheme: dark) { .nav a, .btn { border-color:#3a3d43; } }
-  .btn.primary { background:#3f51b5; color:#fff; border-color:#3f51b5; }
-  .legend { display:flex; flex-wrap:wrap; gap:6px; padding:8px 18px; font-size:11px; }
-  .chip { padding:2px 8px; border-radius:10px; background:var(--c); color:#fff; opacity:.85; }
-  .week { display:grid; grid-template-columns: repeat(7, minmax(150px,1fr)); gap:10px; padding:12px; overflow-x:auto; }
-  .day { background:#fff; border-radius:10px; padding:8px; min-height:120px; }
-  @media (prefers-color-scheme: dark) { .day { background:#1d1f23; } }
-  .day.today { outline:2px solid #3f51b5; outline-offset:-2px; }
-  .day header { font-weight:600; font-size:13px; margin-bottom:6px; display:flex; justify-content:space-between; }
-  .day header .dow { color:#8a8f98; font-weight:400; }
-  .cards { display:flex; flex-direction:column; gap:6px; }
-  .card { border-left:4px solid var(--c); background:color-mix(in srgb, var(--c) 14%, transparent); border-radius:4px; padding:5px 7px; font-size:12px; }
-  .card .time { font-weight:600; font-variant-numeric: tabular-nums; display:flex; justify-content:space-between; gap:6px; }
-  .card .calTag { font-weight:400; color:#8a8f98; font-size:10px; white-space:nowrap; }
-  .card .title { margin-top:2px; }
-  .card .loc { color:#8a8f98; font-size:11px; margin-top:1px; }
-  .empty { color:#b0b4ba; font-size:12px; }
-  .panel { max-width:520px; margin:40px auto; padding:20px; background:#fff; border-radius:12px; font-size:14px; line-height:1.6; }
-  @media (prefers-color-scheme: dark) { .panel { background:#1d1f23; } }
-  .panel input { width:100%; padding:8px; font-size:13px; border:1px solid #d7d9dd; border-radius:6px; font-family:inherit; margin:6px 0 10px; }
+  header.top h1 small { color:var(--mute); font-weight:400; margin-left:6px; font-size:12px; }
+  .nav { display:flex; gap:6px; }
+  .nav a, .btn { text-decoration:none; color:inherit; padding:5px 10px; border:1px solid var(--line); border-radius:6px; font-size:13px; background:transparent; cursor:pointer; font-family:inherit; }
+  .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .legend { display:flex; flex-wrap:nowrap; gap:5px; padding:6px 14px; font-size:11px; overflow-x:auto; background:var(--panel); border-bottom:1px solid var(--line); flex:none; scrollbar-width:none; }
+  .legend::-webkit-scrollbar { display:none; }
+  .chip { padding:2px 8px; border-radius:10px; background:var(--c); color:#fff; white-space:nowrap; opacity:.9; }
+  .banner { padding:6px 14px; font-size:12px; background:#fff3e0; color:#7a4a00; border-bottom:1px solid #ffe0b2; flex:none; display:flex; gap:10px; align-items:center; }
+  @media (prefers-color-scheme: dark) { .banner { background:#3a2a10; color:#ffd699; border-color:#5a4020; } }
+
+  /* ── 24시간 주간 그리드 ── */
+  .sched { flex:1; overflow:auto; position:relative; }
+  .grid { display:grid; grid-template-columns: var(--gutter) repeat(7, minmax(var(--col), 1fr)); min-width:100%; }
+  .corner, .dayhead { position:sticky; top:0; z-index:5; background:var(--panel); border-bottom:1px solid var(--line); }
+  .corner { left:0; z-index:7; }
+  .dayhead { padding:6px 4px 4px; text-align:center; font-size:12px; color:var(--mute); border-left:1px solid var(--line2); }
+  .dayhead b { display:block; font-size:17px; font-weight:600; color:var(--fg); line-height:1.2; }
+  .dayhead.today b { color:var(--accent); }
+  .dayhead.today b span { background:var(--accent); color:#fff; border-radius:999px; padding:0 8px; }
+  .alllabel, .allday { position:sticky; top:48px; z-index:4; background:var(--panel); border-bottom:1px solid var(--line); min-height:26px; }
+  .alllabel { left:0; z-index:6; font-size:10px; color:var(--mute); text-align:right; padding:6px 4px 0 0; }
+  .allday { border-left:1px solid var(--line2); padding:3px 2px; display:flex; flex-direction:column; gap:2px; }
+  .allday .pill { font-size:11px; padding:2px 6px; border-radius:4px; background:var(--c); color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .gutter { position:sticky; left:0; z-index:3; background:var(--bg); height:calc(var(--hour) * 24); font-size:10px; color:var(--mute); font-variant-numeric:tabular-nums; }
+  .gutter div { height:var(--hour); text-align:right; padding-right:5px; transform:translateY(-6px); }
+  .daycol { position:relative; height:calc(var(--hour) * 24); border-left:1px solid var(--line2);
+    background-image: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px var(--hour)); }
+  .daycol.today { background-color: color-mix(in srgb, var(--accent) 5%, transparent); }
+  .daycol.past-day { opacity:.7; }
+
+  .ev { position:absolute; border-radius:4px; padding:3px 5px; font-size:11px; line-height:1.25; overflow:hidden;
+    background:color-mix(in srgb, var(--c) 18%, var(--panel)); border-left:3px solid var(--c); color:var(--fg); }
+  .ev .t { font-weight:600; font-variant-numeric:tabular-nums; font-size:10px; color:var(--c); filter:brightness(.85); }
+  @media (prefers-color-scheme: dark) { .ev .t { filter:brightness(1.3); } }
+  .ev .n { font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ev .l { color:var(--mute); font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ev.past { opacity:.45; }
+  .ev.live { box-shadow:0 0 0 2px var(--c); background:color-mix(in srgb, var(--c) 30%, var(--panel)); }
+  .ev.short { padding:1px 5px; }
+  .ev.short .n { display:inline; }
+  .ev.short .t { display:inline; margin-right:4px; }
+
+  .nowline { position:absolute; left:0; right:0; height:2px; background:var(--now); z-index:2; pointer-events:none; }
+  .nowline::before { content:""; position:absolute; left:-5px; top:-4px; width:10px; height:10px; border-radius:50%; background:var(--now); }
+  .nowtag { position:absolute; right:3px; font-size:10px; color:#fff; background:var(--now); border-radius:3px; padding:0 4px; z-index:4; transform:translateY(-50%); font-variant-numeric:tabular-nums; }
+
+  .panel { max-width:520px; margin:40px auto; padding:20px; background:var(--panel); border-radius:12px; font-size:14px; line-height:1.6; }
+  .panel input { width:100%; padding:8px; font-size:13px; border:1px solid var(--line); border-radius:6px; font-family:inherit; margin:6px 0 10px; background:transparent; color:inherit; }
   .panel code { font-size:12px; background:rgba(127,127,127,.15); padding:1px 5px; border-radius:4px; }
-  .msg { padding:10px 18px; font-size:13px; color:#8a8f98; }
+  .msg { padding:10px 14px; font-size:13px; color:var(--mute); }
   .err { color:#d50000; }
+  @media (max-width:600px) { :root { --hour:48px; --col:104px; --gutter:38px; } .dayhead b { font-size:15px; } header.top h1 { font-size:13px; } }
 </style>
 </head>
 <body>
@@ -46,13 +81,15 @@
   <div class="nav" id="nav"></div>
 </header>
 <div class="legend" id="legend"></div>
-<div id="main"></div>
+<div class="banner" id="banner" hidden></div>
+<div class="sched" id="main"></div>
 
 <script src="https://accounts.google.com/gsi/client" async defer onload="onGisReady()"></script>
 <script>
-/* AliVEWEEK 주차별 일정표 — 정적(GitHub Pages)판.
+/* AliVEWEEK 주간 스케줄러 — 정적(GitHub Pages)판.
    서버 없이 브라우저에서 구글에 직접 로그인해 읽기 전용으로 조회한다.
-   비밀값 없음: OAuth 클라이언트 ID는 공개값이라 이 페이지에 저장해도 된다(localStorage). */
+   비밀값 없음: OAuth 클라이언트 ID는 공개값이라 이 페이지에 저장해도 된다(localStorage).
+   실시간: 현재시각 선은 30초, 일정은 5분마다 갱신. */
 const CAL = { attoyd: "attoyd1004@gmail.com", hanyang: "rladkxh1004@hanyang.ac.kr" };
 const CAL_LABEL = { [CAL.attoyd]: "attoyd", [CAL.hanyang]: "한양" };
 const COLOR_META = {
@@ -66,13 +103,17 @@ const COLOR_META = {
 const WEEK1_START = "2026-08-30"; // 1주차 시작(일) — 학사 캘린더 "N주차" 마커와 동일
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const REFRESH_MS = 5 * 60e3;
 
 const toDateStr = (d) => d.toISOString().slice(0, 10);
-const kstToday = () => toDateStr(new Date(Date.now() + 9 * 3600e3));
+const kstNow = () => new Date(Date.now() + 9 * 3600e3);          // UTC getter로 읽으면 KST
+const kstToday = () => toDateStr(kstNow());
+const kstNowMin = () => { const d = kstNow(); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
 const addDays = (s, n) => { const d = new Date(s + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return toDateStr(d); };
 const sundayOf = (s) => { const d = new Date(s + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return toDateStr(d); };
 const weekNo = (sun) => Math.round((new Date(sun + "T00:00:00Z") - new Date(WEEK1_START + "T00:00:00Z")) / 864e5 / 7) + 1;
 const mmdd = (s) => s.slice(5).replace("-", "/");
+const hm = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const $ = (id) => document.getElementById(id);
 
@@ -82,18 +123,20 @@ if (clientId) { try { localStorage.setItem("aw.clientId", clientId); } catch {} 
 
 const params = new URLSearchParams(location.search);
 const sunday = sundayOf(/^\d{4}-\d{2}-\d{2}$/.test(params.get("start") || "") ? params.get("start") : kstToday());
+const days = Array.from({ length: 7 }, (_, i) => addDays(sunday, i));
 
 function renderHeader() {
-  $("title").textContent = `AliVEWEEK · ${weekNo(sunday)}주차 (${mmdd(sunday)}–${mmdd(addDays(sunday, 6))})`;
-  $("nav").innerHTML = `<a href="?start=${addDays(sunday, -7)}">← 이전</a><a href="?">이번주</a><a href="?start=${addDays(sunday, 7)}">다음 →</a>`;
+  $("title").innerHTML = `AliVEWEEK · ${weekNo(sunday)}주차 <small>${mmdd(sunday)}–${mmdd(addDays(sunday, 6))}</small>`;
+  $("nav").innerHTML = `<a href="?start=${addDays(sunday, -7)}">←</a><a href="?">이번주</a><a href="?start=${addDays(sunday, 7)}">→</a>`;
   $("legend").innerHTML = Object.values(COLOR_META).map((m) => `<span class="chip" style="--c:${m.hex}">${esc(m.name)}</span>`).join("");
 }
+function banner(html) { const b = $("banner"); if (!html) { b.hidden = true; return; } b.innerHTML = html; b.hidden = false; }
 
 function setupPanel(msg) {
   $("main").innerHTML = `<div class="panel">
     ${msg ? `<p class="err">${esc(msg)}</p>` : ""}
     <p><b>처음 1회 설정</b> — 구글 OAuth 클라이언트 ID를 넣어줘. (공개값이라 여기 저장해도 안전)</p>
-    <p style="font-size:12px;color:#8a8f98">console.cloud.google.com → API 및 서비스 → 사용자 인증 정보 → OAuth 클라이언트 ID → <b>웹 애플리케이션</b> → 승인된 자바스크립트 원본에 <code>${esc(location.origin)}</code> 추가</p>
+    <p style="font-size:12px;color:var(--mute)">console.cloud.google.com → API 및 서비스 → 사용자 인증 정보 → OAuth 클라이언트 ID → <b>웹 애플리케이션</b> → 승인된 자바스크립트 원본에 <code>${esc(location.origin)}</code> 추가</p>
     <input id="cid" placeholder="xxxx.apps.googleusercontent.com" value="${esc(clientId || "")}">
     <button class="btn primary" onclick="saveClientId()">저장하고 로그인</button>
   </div>`;
@@ -111,6 +154,7 @@ function savedToken() {
   return null;
 }
 function loginPanel() {
+  if (hasGrid) { banner(`로그인이 만료됐어. <button class="btn primary" onclick="login(true)">다시 로그인</button>`); return; }
   $("main").innerHTML = `<div class="panel">
     <p>구글 로그인이 필요해 — <b>한양 계정(rladkxh1004@hanyang.ac.kr)</b>으로. attoyd 캘린더도 그 계정 권한으로 같이 읽어.</p>
     <button class="btn primary" onclick="login(true)">구글로 로그인</button>
@@ -124,7 +168,8 @@ function login(interactive) {
     callback: (r) => {
       if (r.error) { loginPanel(); return; }
       try { sessionStorage.setItem("aw.tok", JSON.stringify({ token: r.access_token, exp: Date.now() + r.expires_in * 1000 })); } catch {}
-      loadWeek(r.access_token);
+      banner(null);
+      loadWeek(r.access_token, hasGrid);
     },
     error_callback: () => loginPanel(),
   });
@@ -139,43 +184,125 @@ async function fetchEvents(token, calId, timeMin, timeMax) {
   return (await r.json()).items || [];
 }
 
-function cardHtml(c) {
-  const hex = (COLOR_META[c.color] || {}).hex || "#9aa0a6";
-  const time = c.allDay ? "종일" : `${c.start}${c.end ? "–" + c.end : ""}`;
-  return `<div class="card" style="--c:${hex}"><div class="time">${esc(time)}<span class="calTag">${esc(c.cal)}</span></div><div class="title">${esc(c.title)}</div>${c.loc ? `<div class="loc">${esc(c.loc)}</div>` : ""}</div>`;
+/* 겹치는 일정끼리 열을 나눠 나란히 배치 (구글 캘린더식) */
+function layout(items) {
+  items.sort((a, b) => a.s - b.s || b.e - a.e);
+  let cluster = [], clusterEnd = -1;
+  const flush = () => {
+    const colsEnd = [];
+    for (const it of cluster) {
+      let c = colsEnd.findIndex((end) => end <= it.s);
+      if (c < 0) { c = colsEnd.length; colsEnd.push(0); }
+      colsEnd[c] = it.e; it.col = c;
+    }
+    for (const it of cluster) it.cols = colsEnd.length;
+    cluster = [];
+  };
+  for (const it of items) {
+    if (cluster.length && it.s >= clusterEnd) flush();
+    cluster.push(it); clusterEnd = Math.max(clusterEnd, it.e);
+  }
+  if (cluster.length) flush();
 }
 
-async function loadWeek(token) {
-  $("main").innerHTML = `<p class="msg">불러오는 중…</p>`;
-  const days = Array.from({ length: 7 }, (_, i) => addDays(sunday, i));
-  const buckets = Object.fromEntries(days.map((d) => [d, []]));
+let hasGrid = false, timed = {}, allday = {};
+
+function evHtml(it, d, today, nowMin) {
+  const hex = (COLOR_META[it.color] || {}).hex || "#9aa0a6";
+  const dur = it.e - it.s;
+  const state = d < today || (d === today && it.e <= nowMin) ? " past" : d === today && it.s <= nowMin && nowMin < it.e ? " live" : "";
+  const w = 100 / it.cols, left = it.col * w;
+  const shortCls = dur < 40 ? " short" : "";
+  return `<div class="ev${state}${shortCls}" style="--c:${hex};top:${(it.s / 1440) * 100}%;height:${Math.max(dur, 18) / 1440 * 100}%;left:${left}%;width:calc(${w}% - 2px)" title="${esc(it.title)} ${hm(it.s)}–${hm(it.e)}${it.loc ? " · " + esc(it.loc) : ""}">
+    <div class="t">${hm(it.s)}–${hm(it.e)}</div><div class="n">${esc(it.title)}</div>${it.loc && dur >= 60 ? `<div class="l">${esc(it.loc)}</div>` : ""}</div>`;
+}
+
+function renderGrid() {
+  const today = kstToday(), nowMin = kstNowMin();
+  const heads = days.map((d) => {
+    const dt = new Date(d + "T00:00:00Z");
+    return `<div class="dayhead${d === today ? " today" : ""}">${DOW[dt.getUTCDay()]}<b><span>${dt.getUTCDate()}</span></b></div>`;
+  }).join("");
+  const alls = days.map((d) => `<div class="allday">${allday[d].map((a) => `<div class="pill" style="--c:${(COLOR_META[a.color] || {}).hex || "#9aa0a6"}" title="${esc(a.title)}">${esc(a.title)}</div>`).join("")}</div>`).join("");
+  const gutter = `<div class="gutter">${Array.from({ length: 24 }, (_, h) => `<div>${h ? String(h).padStart(2, "0") : ""}</div>`).join("")}</div>`;
+  const cols = days.map((d) => `<div class="daycol${d === today ? " today" : d < today ? " past-day" : ""}" data-d="${d}">${timed[d].map((it) => evHtml(it, d, today, nowMin)).join("")}</div>`).join("");
+  $("main").innerHTML = `<div class="grid"><div class="corner"></div>${heads}<div class="alllabel">종일</div>${alls}${gutter}${cols}</div>`;
+  hasGrid = true;
+  tick();
+}
+
+/* 현재시각 선 — 30초마다 위치만 갱신, 지난 일정은 흐리게·진행 중은 강조 */
+function tick() {
+  if (!hasGrid) return;
+  document.querySelectorAll(".nowline,.nowtag").forEach((n) => n.remove());
+  const today = kstToday(), nowMin = kstNowMin();
+  const col = document.querySelector(`.daycol[data-d="${today}"]`);
+  if (!col) return;
+  const pct = (nowMin / 1440) * 100;
+  col.insertAdjacentHTML("beforeend", `<div class="nowline" style="top:${pct}%"></div>`);
+  document.querySelector(".gutter").insertAdjacentHTML("beforeend", `<div class="nowtag" style="top:${pct}%">${hm(nowMin)}</div>`);
+  col.querySelectorAll(".ev").forEach((el, i) => {
+    const it = timed[today][i]; if (!it) return;
+    el.classList.toggle("past", it.e <= nowMin);
+    el.classList.toggle("live", it.s <= nowMin && nowMin < it.e);
+  });
+}
+setInterval(tick, 30e3);
+
+function scrollToNow(first) {
+  const sched = $("main"), today = kstToday();
+  const hourPx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--hour"));
+  const target = days.includes(today) ? Math.max(0, (kstNowMin() / 60 - 1.5) * hourPx) : 8 * hourPx;
+  sched.scrollTop = target;
+  if (first && days.includes(today)) { const c = document.querySelector(".daycol.today"); if (c) c.scrollIntoView({ inline: "center", block: "nearest" }); }
+}
+
+async function loadWeek(token, quiet) {
+  if (!quiet) $("main").innerHTML = `<p class="msg">불러오는 중…</p>`;
+  const t = Object.fromEntries(days.map((d) => [d, []])), a = Object.fromEntries(days.map((d) => [d, []]));
   const timeMin = `${sunday}T00:00:00+09:00`, timeMax = `${addDays(sunday, 7)}T00:00:00+09:00`;
   try {
-    for (const calId of [CAL.attoyd, CAL.hanyang]) {
-      const evs = await fetchEvents(token, calId, timeMin, timeMax);
+    const lists = await Promise.all([CAL.attoyd, CAL.hanyang].map((c) => fetchEvents(token, c, timeMin, timeMax).then((evs) => [c, evs])));
+    for (const [calId, evs] of lists) {
       for (const ev of evs) {
         if (ev.status === "cancelled") continue;
         const base = { title: ev.summary || "(제목 없음)", loc: ev.location, color: ev.colorId || "0", cal: CAL_LABEL[calId] || calId };
         if (ev.start && ev.start.dateTime) {
-          const k = ev.start.dateTime.slice(0, 10);
-          if (buckets[k]) buckets[k].push({ ...base, allDay: false, start: ev.start.dateTime.slice(11, 16), end: ev.end && ev.end.dateTime ? ev.end.dateTime.slice(11, 16) : "" });
+          const sd = ev.start.dateTime.slice(0, 10), sm = +ev.start.dateTime.slice(11, 13) * 60 + +ev.start.dateTime.slice(14, 16);
+          const edt = (ev.end && ev.end.dateTime) || ev.start.dateTime;
+          const ed = edt.slice(0, 10), em = +edt.slice(11, 13) * 60 + +edt.slice(14, 16);
+          // 자정 넘는 일정은 날짜별 조각으로 (20–24시는 같은 날 24:00까지)
+          for (let d = sd; d <= ed; d = addDays(d, 1)) {
+            const s = d === sd ? sm : 0, e = d === ed ? em : 1440;
+            if (e <= s) continue;
+            if (t[d]) t[d].push({ ...base, s, e });
+          }
         } else if (ev.start && ev.start.date) {
           let d = ev.start.date; const end = (ev.end && ev.end.date) || addDays(d, 1);
-          while (d < end) { if (buckets[d]) buckets[d].push({ ...base, allDay: true, start: "", end: "" }); d = addDays(d, 1); }
+          while (d < end) { if (a[d]) a[d].push(base); d = addDays(d, 1); }
         }
       }
     }
   } catch (e) {
     if (String(e.message) === "auth") { loginPanel(); return; }
+    if (quiet) { banner(`갱신 실패: ${esc(e.message).slice(0, 120)}`); return; }
     $("main").innerHTML = `<p class="msg err">불러오기 실패: ${esc(e.message)}</p>`; return;
   }
-  const today = kstToday();
-  for (const d of days) buckets[d].sort((a, b) => (a.allDay === b.allDay ? a.start.localeCompare(b.start) : a.allDay ? -1 : 1));
-  $("main").innerHTML = `<div class="week">${days.map((d) => {
-    const dt = new Date(d + "T00:00:00Z");
-    return `<section class="day${d === today ? " today" : ""}"><header><span>${dt.getUTCMonth() + 1}/${dt.getUTCDate()}</span><span class="dow">${DOW[dt.getUTCDay()]}</span></header><div class="cards">${buckets[d].map(cardHtml).join("") || '<p class="empty">일정 없음</p>'}</div></section>`;
-  }).join("")}</div>`;
+  for (const d of days) layout(t[d]);
+  timed = t; allday = a;
+  const keepScroll = hasGrid ? { top: $("main").scrollTop, left: $("main").scrollLeft } : null;
+  renderGrid();
+  if (keepScroll === null) scrollToNow(true); else { $("main").scrollTop = keepScroll.top; $("main").scrollLeft = keepScroll.left; }
+  banner(null);
 }
+
+/* 5분마다 조용히 다시 읽기 — 토큰이 죽었으면 조용히 재로그인 시도 */
+setInterval(() => {
+  if (!clientId) return;
+  const tok = savedToken();
+  if (tok) loadWeek(tok, true); else login(false);
+}, REFRESH_MS);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && hasGrid) { tick(); const tok = savedToken(); if (tok) loadWeek(tok, true); } });
 
 function onGisReady() {
   if (!clientId) return;
