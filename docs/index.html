@@ -223,7 +223,7 @@ function loginPanel() {
   $("main").innerHTML = `<div class="panel">
     <p>구글 로그인이 필요해 — <b>한양 계정(${esc(ACCOUNT)})</b>. 한 번 허용해두면 다음부턴 자동으로 들어와.</p>
     ${why ? `<p style="font-size:12px;color:var(--mute)">자동 로그인 안 됨: <code>${esc(why)}</code></p>` : ""}
-    <p style="font-size:12px;color:var(--mute)">redirect_uri_mismatch가 뜨면 콘솔의 OAuth 클라이언트 → <b>승인된 리디렉션 URI</b>에 <code>${esc(REDIRECT)}</code> 추가.</p>
+    <p style="font-size:12px;color:var(--mute)">redirect_uri_mismatch가 뜨면 콘솔의 OAuth 클라이언트 <code>${esc((clientId || "").slice(0, 14))}…</code> → <b>승인된 리디렉션 URI</b>에 <code>${esc(REDIRECT)}</code> 추가.</p>
     <button class="btn primary" onclick="login(true)">구글로 로그인</button>
     <button class="btn" onclick="setupPanel()">클라이언트 ID 바꾸기</button>
   </div>`;
