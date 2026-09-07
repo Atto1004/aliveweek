@@ -189,7 +189,7 @@ function saveClientId() {
 }
 
 const ACCOUNT = CAL.hanyang; // login_hint — 계정 선택 화면 생략
-const REDIRECT = location.origin + location.pathname; // 콘솔 "승인된 리디렉션 URI"에 이 값 그대로
+const REDIRECT = location.origin + location.pathname.replace(/index\.html$/, ""); // 콘솔 "승인된 리디렉션 URI"에 이 값 그대로 (index.html 없이, 끝 / 포함)
 const TOK_KEY = "aw.tok";
 
 function savedToken() {
