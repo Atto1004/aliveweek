@@ -15,6 +15,21 @@ export const COLOR = {
   노동근무: "6", 공부: "7", 돈: "8", 수업학사: "9", 건강몸: "10", 시험마감: "11",
 } as const;
 
+/** 11색 실제 hex + 라벨 — 주차별 일정표 뷰용 (구글 캘린더 eventColor 공식값, 부록 B 순서) */
+export const COLOR_META: Record<string, { name: string; hex: string }> = {
+  "1": { name: "이동", hex: "#7986cb" },
+  "2": { name: "약속·모임", hex: "#33b679" },
+  "3": { name: "창업·대외", hex: "#8e24aa" },
+  "4": { name: "운선", hex: "#e67c73" },
+  "5": { name: "미분류", hex: "#f6bf26" },
+  "6": { name: "노동·근무", hex: "#f4511e" },
+  "7": { name: "공부", hex: "#039be5" },
+  "8": { name: "돈", hex: "#616161" },
+  "9": { name: "수업·학사", hex: "#3f51b5" },
+  "10": { name: "건강·몸", hex: "#0b8043" },
+  "11": { name: "시험·마감", hex: "#d50000" },
+};
+
 /** 2학기 정규 과목 — 제목 정확 매치 (출결 웹훅과 동일 키) */
 export const SUBJECTS = [
   "미분적분학2", "공업수학1", "일반물리학2", "정역학",

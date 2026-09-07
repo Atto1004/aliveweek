@@ -2,17 +2,22 @@
 import { classify, titleTimeHint, CAL } from "./rules";
 import { listEvents, setColor, type Env } from "./google";
 import { writeLog } from "./notion";
+import { renderWeek } from "./week";
 
 export default {
-  /** 상태 확인용 */
+  /** 상태 확인 + 주차별 일정표 뷰 */
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname === "/health") {
       const c = await env.DB.prepare("SELECT v FROM kv WHERE k='lastSync'").first<{ v: string }>();
       return Response.json({ ok: true, service: "AliVEWEEK", lastSync: c?.v ?? null });
     }
+    if (url.pathname === "/" || url.pathname === "/week") {
+      const html = await renderWeek(env, url.searchParams.get("start") ?? undefined);
+      return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+    }
     // TODO(P2): POST /attendance — 학습앱 출결 웹훅 수신 (GAS 은퇴)
-    return new Response("AliVEWEEK", { status: 200 });
+    return new Response("Not found", { status: 404 });
   },
 
   async scheduled(_ev: ScheduledEvent, env: Env, ctx: ExecutionContext) {

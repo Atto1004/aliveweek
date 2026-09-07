@@ -30,9 +30,11 @@ npx wrangler secret put NOTION_TOKEN
 npx wrangler deploy
 ```
 확인: `https://aliveweek.<계정>.workers.dev/health` → `{"ok":true}`
+주차별 일정표: `https://aliveweek.<계정>.workers.dev/` (= `/week`, `?start=YYYY-MM-DD`로 다른 주 조회 — 일요일 기준으로 스냅)
 
 ## 구조
-- `src/rules.ts` — 규칙 엔진 (11색 분류·라우팅·C′·R2·이동 모드)
-- `src/index.ts` — 5분 크론: 변경분 → 분류 → 색 자동/승인 큐 → 노션 로그
+- `src/rules.ts` — 규칙 엔진 (11색 분류·라우팅·C′·R2·이동 모드) + 색 hex/라벨(`COLOR_META`)
+- `src/index.ts` — `/health`·`/week` 서빙 + 5분 크론(변경분 → 분류 → 색 자동/승인 큐 → 노션 로그)
+- `src/week.ts` — 주차별 일정표 HTML 뷰. 구글에서 직접 읽음(D1 캐시 안 거침, §2-A)
 - `src/google.ts` / `src/notion.ts` — API 클라이언트
-- P0-b: 웹푸시 · P1: PWA · P2: 출결 웹훅 흡수·이동 블록 · P3: 배치 엔진·친구 층
+- P0-b: 웹푸시 · P1: PWA(홈 화면 추가·오프라인) · P2: 출결 웹훅 흡수·이동 블록 · P3: 배치 엔진·친구 층

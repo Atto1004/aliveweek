@@ -44,6 +44,20 @@ export async function listEvents(env: Env, calId: string, updatedMinISO?: string
   return ((await r.json()) as { items?: any[] }).items ?? [];
 }
 
+/** 특정 기간 조회 — 주차별 일정표 뷰 전용 (D1 캐시 안 거침, 항상 구글이 원본). singleEvents로 반복 인스턴스 전개. */
+export async function listEventsInRange(env: Env, calId: string, timeMinISO: string, timeMaxISO: string) {
+  const tok = await accessToken(env);
+  const q = new URLSearchParams({
+    maxResults: "250", singleEvents: "true", showDeleted: "false",
+    orderBy: "startTime", timeMin: timeMinISO, timeMax: timeMaxISO,
+  });
+  const r = await fetch(`${BASE}/calendars/${encodeURIComponent(calId)}/events?${q}`, {
+    headers: { Authorization: `Bearer ${tok}` },
+  });
+  if (!r.ok) throw new Error(`listEventsInRange ${calId}: ${await r.text()}`);
+  return ((await r.json()) as { items?: any[] }).items ?? [];
+}
+
 /** 색만 칠한다 — P0의 유일한 자동 쓰기. 시각·삭제·생성은 승인 큐로만. */
 export async function setColor(env: Env, calId: string, eventId: string, colorId: string) {
   const tok = await accessToken(env);
