@@ -67,6 +67,26 @@
   .nowline::before { content:""; position:absolute; left:-5px; top:-4px; width:10px; height:10px; border-radius:50%; background:var(--now); }
   .nowtag { position:absolute; right:3px; font-size:10px; color:#fff; background:var(--now); border-radius:3px; padding:0 4px; z-index:4; transform:translateY(-50%); font-variant-numeric:tabular-nums; }
 
+  /* ── 일정 상세 시트 ── */
+  .ev, .allday .pill { cursor:pointer; }
+  .backdrop { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:20; }
+  .sheet { position:fixed; z-index:21; background:var(--panel); color:var(--fg); box-shadow:0 -4px 24px rgba(0,0,0,.2); border-radius:14px 14px 0 0;
+    left:0; right:0; bottom:0; max-height:80vh; overflow:auto; padding:14px 18px calc(18px + env(safe-area-inset-bottom)); font-size:14px; line-height:1.5; }
+  @media (min-width:700px) { .sheet { left:auto; right:16px; bottom:16px; width:380px; border-radius:14px; max-height:70vh; } }
+  .sheet .bar { width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 10px; }
+  @media (min-width:700px) { .sheet .bar { display:none; } }
+  .sheet h2 { font-size:17px; margin:0 0 6px; padding-left:12px; border-left:5px solid var(--c); line-height:1.3; text-wrap:balance; }
+  .sheet .cat { display:inline-block; font-size:11px; padding:1px 8px; border-radius:10px; background:var(--c); color:#fff; margin-right:6px; }
+  .sheet .cal { font-size:11px; color:var(--mute); }
+  .sheet dl { display:grid; grid-template-columns:52px 1fr; gap:6px 10px; margin:12px 0 0; }
+  .sheet dt { color:var(--mute); font-size:12px; padding-top:1px; }
+  .sheet dd { margin:0; overflow-wrap:anywhere; }
+  .sheet dd.desc { white-space:pre-wrap; font-size:13px; }
+  .sheet a { color:var(--accent); }
+  .sheet .foot { display:flex; gap:8px; margin-top:14px; }
+  .sheet .foot a, .sheet .foot button { flex:1; text-align:center; }
+  .sheet .state { font-size:12px; color:var(--mute); margin-left:6px; }
+
   .panel { max-width:520px; margin:40px auto; padding:20px; background:var(--panel); border-radius:12px; font-size:14px; line-height:1.6; }
   .panel input { width:100%; padding:8px; font-size:13px; border:1px solid var(--line); border-radius:6px; font-family:inherit; margin:6px 0 10px; background:transparent; color:inherit; }
   .panel code { font-size:12px; background:rgba(127,127,127,.15); padding:1px 5px; border-radius:4px; }
@@ -213,23 +233,78 @@ function evHtml(it, d, today, nowMin) {
   const state = d < today || (d === today && it.e <= nowMin) ? " past" : d === today && it.s <= nowMin && nowMin < it.e ? " live" : "";
   const w = 100 / it.cols, left = it.col * w;
   const shortCls = dur < 40 ? " short" : "";
-  return `<div class="ev${state}${shortCls}" style="--c:${hex};top:${(it.s / 1440) * 100}%;height:${Math.max(dur, 18) / 1440 * 100}%;left:${left}%;width:calc(${w}% - 2px)" title="${esc(it.title)} ${hm(it.s)}–${hm(it.e)}${it.loc ? " · " + esc(it.loc) : ""}">
+  const k = reg(it);
+  return `<div class="ev${state}${shortCls}" data-k="${k}" style="--c:${hex};top:${(it.s / 1440) * 100}%;height:${Math.max(dur, 18) / 1440 * 100}%;left:${left}%;width:calc(${w}% - 2px)" title="${esc(it.title)} ${hm(it.s)}–${hm(it.e)}${it.loc ? " · " + esc(it.loc) : ""}">
     <div class="t">${hm(it.s)}–${hm(it.e)}</div><div class="n">${esc(it.title)}</div>${it.loc && dur >= 60 ? `<div class="l">${esc(it.loc)}</div>` : ""}</div>`;
 }
 
 function renderGrid() {
+  registry = [];
   const today = kstToday(), nowMin = kstNowMin();
   const heads = days.map((d) => {
     const dt = new Date(d + "T00:00:00Z");
     return `<div class="dayhead${d === today ? " today" : ""}">${DOW[dt.getUTCDay()]}<b><span>${dt.getUTCDate()}</span></b></div>`;
   }).join("");
-  const alls = days.map((d) => `<div class="allday">${allday[d].map((a) => `<div class="pill" style="--c:${(COLOR_META[a.color] || {}).hex || "#9aa0a6"}" title="${esc(a.title)}">${esc(a.title)}</div>`).join("")}</div>`).join("");
+  const alls = days.map((d) => `<div class="allday">${allday[d].map((a) => `<div class="pill" data-k="${reg(a)}" style="--c:${(COLOR_META[a.color] || {}).hex || "#9aa0a6"}" title="${esc(a.title)}">${esc(a.title)}</div>`).join("")}</div>`).join("");
   const gutter = `<div class="gutter">${Array.from({ length: 24 }, (_, h) => `<div>${h ? String(h).padStart(2, "0") : ""}</div>`).join("")}</div>`;
   const cols = days.map((d) => `<div class="daycol${d === today ? " today" : d < today ? " past-day" : ""}" data-d="${d}">${timed[d].map((it) => evHtml(it, d, today, nowMin)).join("")}</div>`).join("");
   $("main").innerHTML = `<div class="grid"><div class="corner"></div>${heads}<div class="alllabel">종일</div>${alls}${gutter}${cols}</div>`;
   hasGrid = true;
   tick();
 }
+
+/* ── 일정 상세 시트 ── */
+let registry = [];
+const reg = (it) => registry.push(it) - 1;
+const linkify = (s) => esc(s).replace(/(https?:\/\/[^\s<]+)/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+function fmtDate(s) { const d = new Date(s.slice(0, 10) + "T00:00:00Z"); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]})`; }
+function whenText(it) {
+  if (it.s === undefined) { // 종일
+    const end = it.endRaw ? addDays(it.endRaw, -1) : it.startRaw;
+    return end > it.startRaw ? `${fmtDate(it.startRaw)} – ${fmtDate(end)} 종일` : `${fmtDate(it.startRaw)} 종일`;
+  }
+  const sd = it.startRaw.slice(0, 10), ed = (it.endRaw || it.startRaw).slice(0, 10);
+  const st = it.startRaw.slice(11, 16), et = (it.endRaw || "").slice(11, 16);
+  const dur = it.endRaw ? (new Date(it.endRaw) - new Date(it.startRaw)) / 60e3 : 0;
+  const durTxt = dur >= 60 ? `${Math.floor(dur / 60)}시간${dur % 60 ? " " + (dur % 60) + "분" : ""}` : `${dur}분`;
+  const sameDay = sd === ed || (et === "00:00" && addDays(sd, 1) === ed);
+  return sameDay
+    ? `${fmtDate(sd)} ${st}–${sd !== ed ? "24:00" : et} <span class="state">${durTxt}</span>`
+    : `${fmtDate(sd)} ${st} → ${fmtDate(ed)} ${et} <span class="state">${durTxt}</span>`;
+}
+function openSheet(k) {
+  const it = registry[k]; if (!it) return;
+  closeSheet();
+  const meta = COLOR_META[it.color] || { name: "무색", hex: "#9aa0a6" };
+  const today = kstToday(), nowMin = kstNowMin();
+  const day = it.startRaw.slice(0, 10);
+  let state = "";
+  if (it.s !== undefined && day === today) {
+    if (it.s <= nowMin && nowMin < it.e) state = "· 진행 중";
+    else if (it.e <= nowMin) state = "· 끝남";
+    else { const left = it.s - nowMin; state = `· ${left >= 60 ? Math.floor(left / 60) + "시간 " : ""}${left % 60}분 후`; }
+  }
+  const locHtml = it.loc ? `<a href="https://map.kakao.com/?q=${encodeURIComponent(it.loc)}" target="_blank" rel="noopener">${esc(it.loc)}</a>` : "";
+  document.body.insertAdjacentHTML("beforeend", `<div class="backdrop" onclick="closeSheet()"></div>
+  <div class="sheet" role="dialog" style="--c:${meta.hex}">
+    <div class="bar"></div>
+    <h2>${esc(it.title)}</h2>
+    <span class="cat">${esc(meta.name)}</span><span class="cal">${esc(it.cal)} 캘린더${it.recurring ? " · 반복" : ""}</span><span class="state">${state}</span>
+    <dl>
+      <dt>일시</dt><dd>${whenText(it)}</dd>
+      ${locHtml ? `<dt>장소</dt><dd>${locHtml}</dd>` : ""}
+      ${it.meet ? `<dt>회의</dt><dd><a href="${esc(it.meet)}" target="_blank" rel="noopener">Google Meet</a></dd>` : ""}
+      ${it.desc ? `<dt>메모</dt><dd class="desc">${linkify(it.desc.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""))}</dd>` : ""}
+    </dl>
+    <div class="foot">
+      ${it.link ? `<a class="btn" href="${esc(it.link)}" target="_blank" rel="noopener">구글 캘린더에서 열기</a>` : ""}
+      <button class="btn" onclick="closeSheet()">닫기</button>
+    </div>
+  </div>`);
+}
+function closeSheet() { document.querySelectorAll(".backdrop,.sheet").forEach((n) => n.remove()); }
+document.addEventListener("click", (e) => { const el = e.target.closest("[data-k]"); if (el) openSheet(+el.dataset.k); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
 
 /* 현재시각 선 — 30초마다 위치만 갱신, 지난 일정은 흐리게·진행 중은 강조 */
 function tick() {
@@ -266,7 +341,9 @@ async function loadWeek(token, quiet) {
     for (const [calId, evs] of lists) {
       for (const ev of evs) {
         if (ev.status === "cancelled") continue;
-        const base = { title: ev.summary || "(제목 없음)", loc: ev.location, color: ev.colorId || "0", cal: CAL_LABEL[calId] || calId };
+        const base = { title: ev.summary || "(제목 없음)", loc: ev.location, color: ev.colorId || "0", cal: CAL_LABEL[calId] || calId,
+          desc: ev.description || "", link: ev.htmlLink || "", meet: ev.hangoutLink || "", recurring: !!ev.recurringEventId,
+          startRaw: (ev.start && (ev.start.dateTime || ev.start.date)) || "", endRaw: (ev.end && (ev.end.dateTime || ev.end.date)) || "" };
         if (ev.start && ev.start.dateTime) {
           const sd = ev.start.dateTime.slice(0, 10), sm = +ev.start.dateTime.slice(11, 13) * 60 + +ev.start.dateTime.slice(14, 16);
           const edt = (ev.end && ev.end.dateTime) || ev.start.dateTime;
