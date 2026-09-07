@@ -88,6 +88,13 @@
   .sheet .foot a, .sheet .foot button { flex:1; text-align:center; }
   .sheet .state { font-size:12px; color:var(--mute); margin-left:6px; }
 
+  .sheet.add input:not([type=checkbox]), .sheet.add select, .sheet.add textarea { width:100%; padding:8px; font-size:14px; border:1px solid var(--line); border-radius:6px; font-family:inherit; background:transparent; color:inherit; margin:4px 0; }
+  .sheet.add .row { display:flex; gap:8px; align-items:center; }
+  .sheet.add .row input[type=time] { flex:1; }
+  .sheet.add .chk { white-space:nowrap; font-size:13px; display:flex; gap:4px; align-items:center; }
+  .sheet.add .hint { font-size:11px; color:var(--mute); margin:6px 0 0; }
+  .sheet.add input:disabled { opacity:.4; }
+
   .panel { max-width:520px; margin:40px auto; padding:20px; background:var(--panel); border-radius:12px; font-size:14px; line-height:1.6; }
   .panel input { width:100%; padding:8px; font-size:13px; border:1px solid var(--line); border-radius:6px; font-family:inherit; margin:6px 0 10px; background:transparent; color:inherit; }
   .panel code { font-size:12px; background:rgba(127,127,127,.15); padding:1px 5px; border-radius:4px; }
@@ -123,7 +130,7 @@ const COLOR_META = {
 };
 const WEEK1_START = "2026-08-30"; // 1주차 시작(일) — 학사 캘린더 "N주차" 마커와 동일
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
-const SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const SCOPE = "https://www.googleapis.com/auth/calendar.events"; // 읽기+일정 추가
 const REFRESH_MS = 5 * 60e3;
 const MIN_VIS = 30; // 블록 최소 높이(분) — 10분 이동도 제목이 보이게
 
@@ -149,7 +156,7 @@ const days = Array.from({ length: 7 }, (_, i) => addDays(sunday, i));
 
 function renderHeader() {
   $("title").innerHTML = `AliVEWEEK · ${weekNo(sunday)}주차 <small>${mmdd(sunday)}–${mmdd(addDays(sunday, 6))}</small>`;
-  $("nav").innerHTML = `<a href="?start=${addDays(sunday, -7)}">←</a><a href="?">이번주</a><a href="?start=${addDays(sunday, 7)}">→</a>`;
+  $("nav").innerHTML = `<a href="?start=${addDays(sunday, -7)}">←</a><a href="?">이번주</a><a href="?start=${addDays(sunday, 7)}">→</a><button class="btn primary" onclick="openAdd()" title="일정 추가">＋</button>`;
   $("legend").innerHTML = Object.values(COLOR_META).map((m) => `<span class="chip" style="--c:${m.hex}">${esc(m.name)}</span>`).join("");
 }
 function banner(html) { const b = $("banner"); if (!html) { b.hidden = true; return; } b.innerHTML = html; b.hidden = false; }
@@ -172,7 +179,7 @@ function saveClientId() {
 }
 
 function savedToken() {
-  try { const t = JSON.parse(sessionStorage.getItem("aw.tok") || "null"); if (t && Date.now() < t.exp - 60e3) return t.token; } catch {}
+  try { const t = JSON.parse(sessionStorage.getItem("aw.tok") || "null"); if (t && t.scope === SCOPE && Date.now() < t.exp - 60e3) return t.token; } catch {}
   return null;
 }
 function loginPanel() {
@@ -189,7 +196,7 @@ function login(interactive) {
     client_id: clientId, scope: SCOPE,
     callback: (r) => {
       if (r.error) { loginPanel(); return; }
-      try { sessionStorage.setItem("aw.tok", JSON.stringify({ token: r.access_token, exp: Date.now() + r.expires_in * 1000 })); } catch {}
+      try { sessionStorage.setItem("aw.tok", JSON.stringify({ token: r.access_token, exp: Date.now() + r.expires_in * 1000, scope: SCOPE })); } catch {}
       banner(null);
       loadWeek(r.access_token, hasGrid);
     },
@@ -310,8 +317,72 @@ function openSheet(k) {
   </div>`);
 }
 function closeSheet() { document.querySelectorAll(".backdrop,.sheet").forEach((n) => n.remove()); }
-document.addEventListener("click", (e) => { const el = e.target.closest("[data-k]"); if (el) openSheet(+el.dataset.k); });
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-k]"); if (el) { openSheet(+el.dataset.k); return; }
+  const col = e.target.closest(".daycol");
+  if (col && hasGrid) { // 빈 칸: 30분 단위로 내림
+    const min = Math.floor((e.offsetY / col.clientHeight) * 1440 / 30) * 30;
+    openAdd(col.dataset.d, Math.max(0, Math.min(1410, min)));
+  }
+});
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+
+/* ── 일정 추가 ── 페이지는 색을 칠하지 않는다: 색·노션 로그는 서버(Cloudflare) 규칙 엔진 몫 (§29). */
+function openAdd(date, startMin) {
+  closeSheet();
+  const d = date || (days.includes(kstToday()) ? kstToday() : days[1]);
+  const sMin = startMin ?? Math.min(1410, Math.ceil(kstNowMin() / 30) * 30);
+  const eMin = Math.min(1440, sMin + 60);
+  document.body.insertAdjacentHTML("beforeend", `<div class="backdrop" onclick="closeSheet()"></div>
+  <form class="sheet add" role="dialog" onsubmit="return submitAdd(event)">
+    <div class="bar"></div>
+    <h2 style="--c:var(--accent)">일정 추가</h2>
+    <input name="title" placeholder="제목" required autocomplete="off">
+    <div class="row"><input type="date" name="date" value="${d}" required><label class="chk"><input type="checkbox" name="allday" onchange="this.form.start.disabled=this.form.end.disabled=this.checked"> 종일</label></div>
+    <div class="row"><input type="time" name="start" value="${hm(sMin)}" step="300" required><span>–</span><input type="time" name="end" value="${eMin === 1440 ? "23:59" : hm(eMin)}" step="300" required></div>
+    <div class="row"><select name="cal"><option value="${CAL.attoyd}">attoyd (생활·알바·약속)</option><option value="${CAL.hanyang}">한양 (수업·학사·근로)</option></select></div>
+    <input name="loc" placeholder="장소 (선택)" autocomplete="off">
+    <textarea name="desc" placeholder="메모 (선택)" rows="2"></textarea>
+    <p class="hint">색은 서버 규칙 엔진이 판정해 칠해 (배포 전엔 무색으로 들어감). 시각은 30분 단위로 미리 채워둔 것 — 고쳐도 돼.</p>
+    <div class="foot"><button type="button" class="btn" onclick="closeSheet()">취소</button><button type="submit" class="btn primary" id="addBtn">추가</button></div>
+  </form>`);
+  document.querySelector(".add input[name=title]").focus();
+}
+async function submitAdd(e) {
+  e.preventDefault();
+  const f = e.target, btn = $("addBtn");
+  const title = f.title.value.trim(); if (!title) return false;
+  const date = f.date.value, cal = f.cal.value;
+  const body = { summary: title, extendedProperties: { private: { source: "aliveweek-web" } } };
+  if (f.loc.value.trim()) body.location = f.loc.value.trim();
+  if (f.desc.value.trim()) body.description = f.desc.value.trim();
+  if (f.allday.checked) body.start = { date }, body.end = { date: addDays(date, 1) };
+  else {
+    let st = f.start.value, et = f.end.value;
+    if (!st || !et) return false;
+    let endDate = date;
+    if (et <= st) endDate = addDays(date, 1); // 자정 넘김 (예: 20:00–00:00)
+    if (et === "23:59") { et = "00:00"; endDate = addDays(date, 1); }
+    body.start = { dateTime: `${date}T${st}:00+09:00`, timeZone: "Asia/Seoul" };
+    body.end = { dateTime: `${endDate}T${et}:00+09:00`, timeZone: "Asia/Seoul" };
+  }
+  const tok = savedToken();
+  if (!tok) { closeSheet(); login(true); return false; }
+  btn.disabled = true; btn.textContent = "추가 중…";
+  try {
+    const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal)}/events`, {
+      method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (r.status === 401 || r.status === 403) { try { sessionStorage.removeItem("aw.tok"); } catch {} closeSheet(); banner(`쓰기 권한이 필요해 — 다시 로그인하고 권한을 허용해줘. <button class="btn primary" onclick="login(true)">다시 로그인</button>`); return false; }
+    if (!r.ok) throw new Error((await r.text()).slice(0, 200));
+    closeSheet();
+    await loadWeek(tok, true);
+  } catch (err) {
+    btn.disabled = false; btn.textContent = "추가";
+    banner(`추가 실패: ${esc(err.message)}`);
+  }
+  return false;
+}
 
 /* 현재시각 선 — 30초마다 위치만 갱신, 지난 일정은 흐리게·진행 중은 강조 */
 function tick() {
