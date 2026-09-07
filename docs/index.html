@@ -122,7 +122,6 @@
 <div class="banner" id="banner" hidden></div>
 <div class="sched" id="main"></div>
 
-<script src="https://accounts.google.com/gsi/client" async defer onload="onGisReady()"></script>
 <script>
 /* AliVEWEEK 주간 스케줄러 — 정적(GitHub Pages)판.
    서버 없이 브라우저에서 구글에 직접 로그인해 읽기 전용으로 조회한다.
@@ -189,37 +188,57 @@ function saveClientId() {
   login(true);
 }
 
+const ACCOUNT = CAL.hanyang; // login_hint — 계정 선택 화면 생략
+const REDIRECT = location.origin + location.pathname; // 콘솔 "승인된 리디렉션 URI"에 이 값 그대로
+const TOK_KEY = "aw.tok";
+
 function savedToken() {
-  try { const t = JSON.parse(sessionStorage.getItem("aw.tok") || "null"); if (t && t.scope === SCOPE && Date.now() < t.exp - 60e3) return t.token; } catch {}
+  try { const t = JSON.parse(localStorage.getItem(TOK_KEY) || "null"); if (t && t.scope === SCOPE && Date.now() < t.exp - 60e3) return t.token; } catch {}
   return null;
 }
+/* 리디렉트로 돌아온 토큰 회수 — URL 해시에 access_token이 있으면 저장하고 주소를 원래대로 */
+function absorbRedirect() {
+  if (!location.hash.includes("access_token=") && !location.hash.includes("error=")) return null;
+  const h = new URLSearchParams(location.hash.slice(1));
+  let st = {}; try { st = JSON.parse(h.get("state") || "{}"); } catch {}
+  const back = REDIRECT + (st.start ? `?start=${st.start}` : "");
+  history.replaceState(null, "", back);
+  if (h.get("error")) { try { sessionStorage.setItem("aw.silentFail", h.get("error")); } catch {} return null; }
+  const tok = { token: h.get("access_token"), exp: Date.now() + (+h.get("expires_in") || 3600) * 1000, scope: SCOPE };
+  try { localStorage.setItem(TOK_KEY, JSON.stringify(tok)); sessionStorage.removeItem("aw.silentFail"); } catch {}
+  return tok.token;
+}
+/* silent=true: 구글 세션이 살아있으면 화면 없이 즉시 돌아옴(prompt=none). 실패하면 해시에 error가 실려 돌아온다. */
+function login(interactive) {
+  const q = new URLSearchParams({
+    client_id: clientId, redirect_uri: REDIRECT, response_type: "token", scope: SCOPE, include_granted_scopes: "true",
+    login_hint: ACCOUNT, state: JSON.stringify({ start: params.get("start") || "" }),
+  });
+  if (!interactive) q.set("prompt", "none");
+  location.assign("https://accounts.google.com/o/oauth2/v2/auth?" + q);
+}
 function loginPanel() {
+  let why = ""; try { why = sessionStorage.getItem("aw.silentFail") || ""; } catch {}
   if (hasGrid) { banner(`로그인이 만료됐어. <button class="btn primary" onclick="login(true)">다시 로그인</button>`); return; }
   $("main").innerHTML = `<div class="panel">
-    <p>구글 로그인이 필요해 — <b>한양 계정(rladkxh1004@hanyang.ac.kr)</b>으로. attoyd 캘린더도 그 계정 권한으로 같이 읽어.</p>
+    <p>구글 로그인이 필요해 — <b>한양 계정(${esc(ACCOUNT)})</b>. 한 번 허용해두면 다음부턴 자동으로 들어와.</p>
+    ${why ? `<p style="font-size:12px;color:var(--mute)">자동 로그인 안 됨: <code>${esc(why)}</code></p>` : ""}
+    <p style="font-size:12px;color:var(--mute)">redirect_uri_mismatch가 뜨면 콘솔의 OAuth 클라이언트 → <b>승인된 리디렉션 URI</b>에 <code>${esc(REDIRECT)}</code> 추가.</p>
     <button class="btn primary" onclick="login(true)">구글로 로그인</button>
     <button class="btn" onclick="setupPanel()">클라이언트 ID 바꾸기</button>
   </div>`;
 }
-function login(interactive) {
-  if (!window.google || !google.accounts) { setTimeout(() => login(interactive), 300); return; }
-  const tc = google.accounts.oauth2.initTokenClient({
-    client_id: clientId, scope: SCOPE,
-    callback: (r) => {
-      if (r.error) { loginPanel(); return; }
-      try { sessionStorage.setItem("aw.tok", JSON.stringify({ token: r.access_token, exp: Date.now() + r.expires_in * 1000, scope: SCOPE })); } catch {}
-      banner(null);
-      loadWeek(r.access_token, hasGrid);
-    },
-    error_callback: () => loginPanel(),
-  });
-  tc.requestAccessToken({ prompt: interactive ? "" : "none" });
+/* 토큰이 없거나 만료 → 이번 세션에 아직 안 해봤으면 조용히 리디렉트 시도, 이미 실패했으면 버튼 */
+function autoLogin() {
+  let tried = ""; try { tried = sessionStorage.getItem("aw.silentFail") || ""; } catch {}
+  if (tried) { loginPanel(); return; }
+  login(false);
 }
 
 async function fetchEvents(token, calId, timeMin, timeMax) {
   const q = new URLSearchParams({ maxResults: "250", singleEvents: "true", showDeleted: "false", orderBy: "startTime", timeMin, timeMax, timeZone: "Asia/Seoul" });
   const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${q}`, { headers: { Authorization: "Bearer " + token } });
-  if (r.status === 401 || r.status === 403) { try { sessionStorage.removeItem("aw.tok"); } catch {} throw new Error("auth"); }
+  if (r.status === 401 || r.status === 403) { try { localStorage.removeItem(TOK_KEY); } catch {} throw new Error("auth"); }
   if (!r.ok) throw new Error(await r.text());
   return (await r.json()).items || [];
 }
@@ -407,7 +426,7 @@ async function gcal(tok, path, method, body) {
   const r = await fetch(path.startsWith("/") ? `https://www.googleapis.com/calendar/v3${path}` : `https://www.googleapis.com/calendar/v3/calendars/${path}`, {
     method, headers: { Authorization: "Bearer " + tok, ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined,
   });
-  if (r.status === 401 || r.status === 403) { try { sessionStorage.removeItem("aw.tok"); } catch {} throw new Error("auth"); }
+  if (r.status === 401 || r.status === 403) { try { localStorage.removeItem(TOK_KEY); } catch {} throw new Error("auth"); }
   if (!r.ok && r.status !== 410) throw new Error((await r.text()).slice(0, 200)); // 410 = 이미 삭제됨
   return r.status === 204 || r.status === 410 ? null : r.json();
 }
@@ -651,17 +670,13 @@ async function loadWeek(token, quiet) {
 setInterval(() => {
   if (!clientId) return;
   const tok = savedToken();
-  if (tok) loadWeek(tok, true); else login(false);
+  if (tok) loadWeek(tok, true); else if (!document.hidden) autoLogin();
 }, REFRESH_MS);
-document.addEventListener("visibilitychange", () => { if (!document.hidden && hasGrid) { tick(); const tok = savedToken(); if (tok) loadWeek(tok, true); } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && hasGrid) { tick(); const tok = savedToken(); if (tok) loadWeek(tok, true); else autoLogin(); } });
 
-function onGisReady() {
-  if (!clientId) return;
-  if (!savedToken()) login(false); // 조용히 시도 → 실패하면 로그인 버튼
-}
 renderHeader();
 if (!clientId) setupPanel();
-else { const t = savedToken(); if (t) loadWeek(t); else loginPanel(); }
+else { const t = absorbRedirect() || savedToken(); if (t) loadWeek(t); else autoLogin(); }
 </script>
 </body>
 </html>
